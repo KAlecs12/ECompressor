@@ -1,25 +1,27 @@
 // Modules to control application life and create native browser window
-const {app, BrowserWindow, ipcMain, dialog} = require('electron')
+const {app, BrowserWindow, ipcMain, dialog, nativeTheme} = require('electron')
 const path = require('path')
 const pngquant = require('pngquant-bin');
 const { execFile } = require('child_process');
 const fs = require('fs');
 const { shell } = require('electron');
+const ProgressBar = require('electron-progressbar');
 
 function createWindow () {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
+    fullscreen: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js')
     }
   })
 
-ipcMain.on('open-file-dialog', (event) => {
+  ipcMain.on('open-file-dialog', (event) => {
     const options = {
       title: 'Sélectionner le ou les fichiers à upload',
-      properties: ['openFile']
+      properties: ['openFile', 'multiSelection']
     };
 
     dialog.showOpenDialog(mainWindow, options).then(result => {
@@ -42,6 +44,25 @@ ipcMain.on('open-file-dialog', (event) => {
           fs.mkdirSync(compressedFilesDir);
         }
 
+        const progressBar = new ProgressBar({
+          indeterminate: true,
+          title: 'Compression in progress...',
+          text: 'Please wait...'
+        });
+        progressBar
+          .on('completed', () => {
+            console.log('Compression completed');
+            progressBar.detail = 'Compression completed.';
+          })
+          .on('aborted', () => {
+            console.log('Compression aborted');
+            dialog.showMessageBox({
+              type: 'warning',
+              title: 'Oh no !',
+              message: 'Compression aborted !'
+            });
+          });
+
         const filePaths = result.filePaths;
 
         filePaths.forEach(filePath => {
@@ -51,29 +72,40 @@ ipcMain.on('open-file-dialog', (event) => {
           execFile(pngquant, ['-o', compressedFilePath, filePath], (error, stdout, stderr) => {
             if (error) {
               console.error(`Error compressing the file: ${error}`);
+              dialog.showMessageBox({
+                type: 'warning',
+                title: 'Oh no !',
+                message: 'Error compressing the file!'
+              })
+              progressBar.setCompleted();
               return;
             }
 
             console.log(`File compressed successfully: ${filePath}`);
             shell.openPath(compressedFilesDir);
+              dialog.showMessageBox({
+                type: 'info',
+                title: 'Congratulation !',
+                message: 'Your files have been compressed !'
+              });
+              progressBar.setCompleted();
           });
-        })
+        });
       }
     }).catch(err => {
       console.error(`Error opening file dialog: ${err}`);
+      dialog.showMessageBox({
+        type: 'warning',
+        title: 'Oh no !',
+        message: 'Error opening file dialog!'
+      })
     });
 });
 
-  // and load the index.html of the app.
   mainWindow.loadFile('index.html')
 
-  // Open the DevTools.
-  // mainWindow.webContents.openDevTools()
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   createWindow()
 
@@ -84,12 +116,15 @@ app.whenReady().then(() => {
   })
 })
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit()
 })
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.
+
+ipcMain.on('darkmode', (event) => {
+  const isDarkMode = nativeTheme.shouldUseDarkColors;
+  console.log("DARK MODE")
+  if (isDarkMode) {
+    mainWindow.webContents.executeJavaScript('document.body.classList.add("dark-mode")');
+  }
+})

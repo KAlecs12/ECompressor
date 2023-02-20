@@ -11,3 +11,11 @@ const btnUpload = document.getElementById("open-file");
 btnUpload.addEventListener('click', () => {
     electronAPI.openFile()
 })
+
+const toggleDarkMode = () => {
+    const body = document.querySelector('body');
+    body.classList.toggle('dark-mode');
+}
+
+const darkModeToggle = document.querySelector('#dark-mode-toggle');
+darkModeToggle.addEventListener('click', toggleDarkMode);
